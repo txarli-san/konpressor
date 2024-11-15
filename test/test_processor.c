@@ -1,33 +1,42 @@
-// test/test_processor.c
 #include "../src/processor.h"
 #include "test_utils.h"
 #include <stdio.h>
+#include <math.h>
 
 int main() {
     AudioProcessor proc;
     init_processor(&proc);
     
-    // Generate test signals
+    // Configure
+    proc.threshold = 0.5f;
+    proc.level = 1.0f;
+    proc.attack_ms = 5.0f;
+    proc.release_ms = 50.0f;
+    
+    printf("=== Test 1: Below threshold ===\n");
+    float phase = M_PI/4.0f;
     for(int i = 0; i < BLOCK_SIZE; i++) {
-        proc.in_a[i] = generate_sine(440.0f, i);
-        proc.in_b[i] = generate_sine(880.0f, i);
+        float t = (float)i / SAMPLE_RATE;
+        proc.in_a[i] = 0.4f * sinf(2.0f * M_PI * 440.0f * t + phase);
     }
     
-    // Test different configurations
-    printf("Normal processing:\n");
     process_block(&proc);
-    for(int i = 0; i < 5; i++) {
-        printf("Sample %d: In=%.3f Filtered=%.3f Out=%.3f\n",
-               i, proc.in_a[i], proc.filtered[i], proc.out[i]);
+    printf("Input Peak: %.3f, Envelope: %.3f, Threshold: %.3f\n", 
+           proc.detector.peak, proc.detector.envelope, proc.threshold);
+    printf("First out samples: %.3f %.3f %.3f\n", 
+           proc.out[0], proc.out[1], proc.out[2]);
+    
+    printf("\n=== Test 2: Above threshold ===\n");
+    for(int i = 0; i < BLOCK_SIZE; i++) {
+        float t = (float)i / SAMPLE_RATE;
+        proc.in_a[i] = 1.0f * sinf(2.0f * M_PI * 440.0f * t + phase);
     }
     
-    printf("\nWith bypass:\n");
-    set_bypass(&proc, 1);
     process_block(&proc);
-    for(int i = 0; i < 5; i++) {
-        printf("Sample %d: In=%.3f Filtered=%.3f Out=%.3f\n",
-               i, proc.in_a[i], proc.filtered[i], proc.out[i]);
-    }
+    printf("Input Peak: %.3f, Envelope: %.3f, Threshold: %.3f\n", 
+           proc.detector.peak, proc.detector.envelope, proc.threshold);
+    printf("First out samples: %.3f %.3f %.3f\n", 
+           proc.out[0], proc.out[1], proc.out[2]);
     
     return 0;
 }
