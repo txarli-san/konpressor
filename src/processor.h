@@ -4,6 +4,7 @@
 #include "config.h"
 #include "filter.h"
 #include "bypass.h"
+#include "level_detector.h"
 
 typedef struct {
     // Input/Output buffers
@@ -15,6 +16,7 @@ typedef struct {
     // Processing modules
     BiquadFilter freq_filter;
     BypassModule bypass;
+    LevelDetector detector;
     
     // Parameters
     float freq;
@@ -25,6 +27,7 @@ typedef struct {
     
     // Routing
     int pre_post_enabled;
+    
 } AudioProcessor;
 
 void init_processor(AudioProcessor *proc);

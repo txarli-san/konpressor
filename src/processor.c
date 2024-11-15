@@ -12,7 +12,8 @@ void init_processor(AudioProcessor *proc) {
     // Initialize modules
     init_biquad(&proc->freq_filter, proc->freq);
     init_bypass(&proc->bypass);
-    
+    init_level_detector(&proc->detector, proc->attack_ms, proc->release_ms);
+
     // Clear buffers
     for(int i = 0; i < BLOCK_SIZE; i++) {
         proc->in_a[i] = 0.0f;
@@ -58,4 +59,8 @@ void process_block(AudioProcessor *proc) {
             proc->out[i] = proc->filtered[i];
         }
     }
+
+    // Level detection on filtered signal
+    process_level_detector(&proc->detector, proc->filtered, BLOCK_SIZE);
+
 }
