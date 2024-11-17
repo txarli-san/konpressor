@@ -40,46 +40,64 @@ void update_detector(LevelDetector *det, float threshold, float ratio,
 }
 
 float process_level_detector(LevelDetector *det, const float *input, int nframes) {
-    // Calculate current RMS level
+    // Calculate RMS
     float sum_squared = 0.0f;
     for (int i = 0; i < nframes; i++) {
         sum_squared += input[i] * input[i];
     }
-    float current_rms = sqrtf(sum_squared / nframes);
+    float rms = sqrtf(sum_squared / nframes);
+    float input_db = 20.0f * log10f(rms + 1e-30f);
     
-    // Set initial envelope if not set
-    if (det->envelope <= 0.0f) {
-        det->envelope = current_rms;
-    }
+    det->current_level = input_db;
     
-    // Update envelope with correct coefficient application
-    if (current_rms > det->envelope) {
-        det->envelope = det->envelope + (current_rms - det->envelope) * (1.0f - det->attack_coef);
-    } else {
-        det->envelope = det->envelope + (current_rms - det->envelope) * (1.0f - det->release_coef);
-    }
-    
-    // Convert to dB for detection
-    det->current_level = LINEAR_TO_DB(det->envelope);
-    
-    printf("RMS: %.1f dB, Envelope: %.1f dB, Threshold: %.1f dB\n",
-           LINEAR_TO_DB(current_rms), det->current_level, det->threshold);
-    
-    // Only apply gain reduction if envelope exceeds threshold
-    if (det->current_level <= det->threshold) {
+    // If below threshold, no processing
+    if (input_db <= det->threshold) {
         det->current_gr = 0.0f;
-        return 1.0f;  // Unity gain
+        return 1.0f;
     }
     
-    // Calculate gain reduction in dB
-    float over_threshold = det->current_level - det->threshold;
-    det->current_gr = -(over_threshold * (1.0f - (1.0f / det->ratio)));
+    // Calculate how far input is above threshold
+    float db_over = input_db - det->threshold;
     
-    // Track maximum reduction
-    if (det->current_gr < det->max_gr) {
-        det->max_gr = det->current_gr;
-    }
+    // For a ratio of R:1, input should only rise by 1dB for every R dB over threshold
+    float output_db_over = db_over / det->ratio;
+    float target_db = det->threshold + output_db_over;
     
-    // Convert reduction to linear gain
-    return powf(10.0f, det->current_gr * 0.05f);
+    // Calculate gain needed
+    float gain_db = target_db - input_db;
+    det->current_gr = gain_db;
+    
+    // Convert to linear gain
+    return powf(10.0f, gain_db / 20.0f);
 }
+// float process_level_detector(LevelDetector *det, const float *input, int nframes) {
+//     // Print first few samples to verify input
+//     printf("First 5 samples: ");
+//     for (int i = 0; i < 5; i++) {
+//         printf("%.6f ", input[i]);
+//     }
+//     printf("\n");
+
+//     // Calculate RMS
+//     float sum_squared = 0.0f;
+//     for (int i = 0; i < nframes; i++) {
+//         sum_squared += input[i] * input[i];
+//     }
+//     float rms = sqrtf(sum_squared / nframes);
+//     float rms_db = 20.0f * log10f(rms + 1e-30f);
+    
+//     printf("RMS: %.6f (%.1f dB)\n", rms, rms_db);
+    
+//     det->current_level = rms_db;
+    
+//     if (rms_db <= det->threshold) {
+//         det->current_gr = 0.0f;
+//         return 1.0f;
+//     }
+    
+//     float over = rms_db - det->threshold;
+//     float reduction = over * (1.0f - 1.0f/det->ratio);
+//     det->current_gr = -reduction;
+    
+//     return powf(10.0f, -reduction / 20.0f);
+// }

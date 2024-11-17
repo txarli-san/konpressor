@@ -61,21 +61,39 @@ int main() {
         float out_over_threshold = out_level - proc.threshold;
         float measured_ratio = over_threshold / out_over_threshold;
         printf("Measured Ratio: %.1f:1\n\n", measured_ratio);
+        printf("--- Compression Results ---\n");
+        printf("Input Level: %.1f dB\n", in_level);
+        printf("Input Over Threshold: %.1f dB\n", over_threshold);
+        printf("Output Level: %.1f dB\n", out_level);
+        printf("Output Over Threshold: %.1f dB\n", out_level - proc.threshold);
+        printf("Expected Ratio: %.1f:1\n", proc.detector.ratio);
+        printf("Measured Ratio: %.1f:1\n", over_threshold / (out_level - proc.threshold));
+        printf("Gain Change: %.1f dB\n", out_level - in_level);
     }
     
     // Test 3: Below Threshold (-24dB signal)
-    printf("--- Below Threshold Test ---\n");
+    printf("\n--- Below Threshold Test ---\n");
+    
+    // First initialize processor with settings
+    init_processor(&proc);  // Reset processor state
+    set_threshold(&proc, -20.0f);
+    set_ratio(&proc, 4.0f);
+    set_attack(&proc, 10.0f);
+    set_release(&proc, 100.0f);
+    
+    // Then generate test signal
     for(int i = 0; i < BLOCK_SIZE; i++) {
         proc.in_a[i] = generate_sine_at_db(440.0f, i, -24.0f);
     }
     
     process_block(&proc);
     
-    in_level = compute_rms_level(proc.in_a, BLOCK_SIZE);
-    out_level = compute_rms_level(proc.out, BLOCK_SIZE);
-    printf("Input Level: %.1f dB\n", in_level);
-    printf("Output Level: %.1f dB\n", out_level);
-    printf("Gain Change: %.1f dB\n", out_level - in_level);
+    // Print actual buffer values to verify
+    printf("Actual input buffer values:\n");
+    for(int i = 0; i < 5; i++) {
+        printf("%.6f ", proc.in_a[i]);
+    }
+    printf("\n");
     
     return 0;
 }
