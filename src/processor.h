@@ -5,6 +5,7 @@
 #include "filter.h"
 #include "bypass.h"
 #include "level_detector.h"
+#include "hate.h"
 
 typedef struct {
     // Input/Output buffers
@@ -19,6 +20,7 @@ typedef struct {
     BiquadFilter sc_filter;      // Sidechain filter
     BypassModule bypass;
     LevelDetector detector;
+    HateModule hate;             // Saturation module
     
     // Parameters
     float freq;          // Filter frequency

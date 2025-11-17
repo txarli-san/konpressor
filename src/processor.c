@@ -1,4 +1,5 @@
 #include "processor.h"
+#include "hate.h"
 #include <math.h>
 
 void init_processor(AudioProcessor *proc) {
@@ -19,12 +20,13 @@ void init_processor(AudioProcessor *proc) {
     init_biquad(&proc->freq_filter, proc->freq);
     init_biquad(&proc->sc_filter, proc->freq);
     init_bypass(&proc->bypass);
-    init_level_detector(&proc->detector, 
+    init_level_detector(&proc->detector,
                        proc->threshold,
                        proc->ratio,
                        proc->attack_ms,
                        proc->release_ms,
                        proc->knee_width);
+    init_hate(&proc->hate);
     
     // Clear buffers
     for(int i = 0; i < BLOCK_SIZE; i++) {
@@ -121,10 +123,15 @@ void process_block(AudioProcessor *proc) {
     proc->current_gr = proc->detector.current_gr;
     proc->max_gr = proc->detector.max_gr;
 
+    // Create intermediate buffer for mixed signal
+    float mixed[BLOCK_SIZE];
     for(int i = 0; i < BLOCK_SIZE; i++) {
         // Apply compression gain and makeup gain to main signal (in_b)
         float compressed_b = proc->in_b[i] * gain * proc->level;
         // Mix: (compressed_b * (1-mix)) + (in_a * mix)
-        proc->out[i] = compressed_b * (1.0f - proc->mix) + proc->in_a[i] * proc->mix;
+        mixed[i] = compressed_b * (1.0f - proc->mix) + proc->in_a[i] * proc->mix;
     }
+
+    // Apply hate (saturation) to mixed signal
+    process_hate(&proc->hate, mixed, proc->out, BLOCK_SIZE);
 }

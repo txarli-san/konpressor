@@ -1,4 +1,5 @@
 #include "../src/processor.h"
+#include "../src/hate.h"
 #include "test_utils.h"
 #include <stdio.h>
 #include <math.h>
@@ -237,6 +238,141 @@ int main() {
                 "Mix=0.5 should blend between compressed_b and in_a");
 
     printf("TDD Step 2b test completed\n");
+
+    // TDD Step 3a: Test HateModule struct and init_hate function
+    printf("\n=== TDD Step 3a: HateModule Structure Test ===\n");
+
+    // This will fail to compile until HateModule is created
+    HateModule hate;
+    init_hate(&hate);
+
+    printf("Hate drive: %.2f\n", hate.drive);
+    printf("Hate pre_post_mix: %.2f\n", hate.pre_post_mix);
+    printf("Hate bypass: %d\n", hate.bypass);
+
+    TEST_ASSERT_FLOAT_EQ(hate.drive, 1.0f, 0.01f, "Hate drive should initialize to 1.0");
+    TEST_ASSERT_FLOAT_EQ(hate.pre_post_mix, 0.0f, 0.01f, "Hate pre_post_mix should initialize to 0.0");
+    TEST_ASSERT(hate.bypass == 0, "Hate bypass should initialize to 0");
+
+    printf("TDD Step 3a test completed\n");
+
+    // TDD Step 3b: Test process_hate - saturation and wet/dry blend
+    printf("\n=== TDD Step 3b: Hate Processing Test ===\n");
+
+    HateModule hate_3b;
+    init_hate(&hate_3b);
+    float input_3b[BLOCK_SIZE];
+    float output_3b[BLOCK_SIZE];
+
+    // Generate test signal (sine wave) - high level to test saturation
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+        input_3b[i] = 2.0f * generate_sine(440.0f, i);  // High level to trigger saturation
+    }
+
+    // Test bypass
+    hate_3b.bypass = 1;
+    process_hate(&hate_3b, input_3b, output_3b, BLOCK_SIZE);
+    TEST_ASSERT(buffers_equal(input_3b, output_3b, BLOCK_SIZE, 0.001f), "Bypass should pass input unchanged");
+
+    // Test saturation with drive = 2.0
+    hate_3b.bypass = 0;
+    hate_3b.drive = 2.0f;
+    hate_3b.pre_post_mix = 1.0f;  // Full wet
+    process_hate(&hate_3b, input_3b, output_3b, BLOCK_SIZE);
+
+    // Check that output is saturated (should be clipped compared to linear)
+    int saturated_count = 0;
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+        if (fabsf(output_3b[i]) >= 0.9f) {  // Near clipping
+            saturated_count++;
+        }
+    }
+    TEST_ASSERT(saturated_count > BLOCK_SIZE / 4, "High drive should cause saturation");
+
+    // Test wet/dry mix = 0.5
+    hate_3b.pre_post_mix = 0.5f;
+    process_hate(&hate_3b, input_3b, output_3b, BLOCK_SIZE);
+
+    // Output should be blend of dry and saturated
+    for (int i = 0; i < 5; i++) {
+        float expected = input_3b[i] * 0.5f + tanhf(input_3b[i] * hate_3b.drive) * 0.5f;
+        TEST_ASSERT_FLOAT_EQ(output_3b[i], expected, 0.01f, "Wet/dry mix should blend correctly");
+    }
+
+    printf("TDD Step 3b test completed\n");
+
+    // TDD Step 3c: Test HateModule integration in AudioProcessor
+    printf("\n=== TDD Step 3c: HateModule Integration Test ===\n");
+
+    AudioProcessor proc_3c;
+    init_processor(&proc_3c);
+
+    // Check that hate module is initialized
+    printf("Processor hate drive: %.2f\n", proc_3c.hate.drive);
+    printf("Processor hate pre_post_mix: %.2f\n", proc_3c.hate.pre_post_mix);
+    printf("Processor hate bypass: %d\n", proc_3c.hate.bypass);
+
+    TEST_ASSERT_FLOAT_EQ(proc_3c.hate.drive, 1.0f, 0.01f, "Processor hate drive should initialize to 1.0");
+    TEST_ASSERT_FLOAT_EQ(proc_3c.hate.pre_post_mix, 0.0f, 0.01f, "Processor hate pre_post_mix should initialize to 0.0");
+    TEST_ASSERT(proc_3c.hate.bypass == 0, "Processor hate bypass should initialize to 0");
+
+    printf("TDD Step 3c test completed\n");
+
+    // TDD Step 3d: Test hate processing in process_block after mix
+    printf("\n=== TDD Step 3d: Hate in Process Block Test ===\n");
+
+    AudioProcessor proc_3d;
+    init_processor(&proc_3d);
+
+    // Set up compression and mix
+    set_threshold(&proc_3d, -20.0f);
+    set_ratio(&proc_3d, 4.0f);
+    set_attack(&proc_3d, 10.0f);
+    set_release(&proc_3d, 100.0f);
+    proc_3d.mix = 0.5f;  // 50/50 mix
+
+    // Configure hate for saturation
+    proc_3d.hate.drive = 3.0f;
+    proc_3d.hate.pre_post_mix = 1.0f;  // Full saturation
+    proc_3d.hate.bypass = 0;
+
+    // Input signals
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+        proc_3d.in_a[i] = 1.5f * generate_sine(440.0f, i);  // Control signal
+        proc_3d.in_b[i] = 1.0f * generate_sine(880.0f, i);  // Main signal
+    }
+
+    // Process
+    for (int i = 0; i < 10; i++) {
+        process_block(&proc_3d);
+    }
+
+    // Check that output shows saturation characteristics
+    int saturated_samples = 0;
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+        if (fabsf(proc_3d.out[i]) > 0.95f) {  // Near tanh clipping
+            saturated_samples++;
+        }
+    }
+
+    printf("Saturated samples: %d/%d\n", saturated_samples, BLOCK_SIZE);
+    TEST_ASSERT(saturated_samples > BLOCK_SIZE / 10, "Hate processing should add saturation to mixed signal");
+
+    // Test hate bypass
+    proc_3d.hate.bypass = 1;
+    process_block(&proc_3d);
+
+    // With bypass, should not have additional saturation
+    int saturated_after_bypass = 0;
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+        if (fabsf(proc_3d.out[i]) > 0.95f) {
+            saturated_after_bypass++;
+        }
+    }
+
+    TEST_ASSERT(saturated_after_bypass < saturated_samples / 2, "Hate bypass should reduce saturation");
+
+    printf("TDD Step 3d test completed\n");
 
     return 0;
 }
