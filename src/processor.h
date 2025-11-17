@@ -14,6 +14,7 @@ typedef struct {
     float filtered[BLOCK_SIZE];
     float out[BLOCK_SIZE];
     float sc_filtered[BLOCK_SIZE];  // Sidechain filtered buffer
+    float feedback_buffer[BLOCK_SIZE];  // Feedback delay buffer
     
     // Processing modules
     BiquadFilter freq_filter;    // Main filter
@@ -31,7 +32,8 @@ typedef struct {
     float knee_width;    // Soft knee width (dB)
     float level;         // Output level
     float mix;           // Mix amount (0.0-1.0)
-    
+    float feedback_amount;  // Feedback amount (0.0-1.0)
+
     // Routing
     int pre_post_enabled;
     int sc_enabled;      // Sidechain enable

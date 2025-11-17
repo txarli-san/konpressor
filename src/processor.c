@@ -4,7 +4,7 @@
 
 void init_processor(AudioProcessor *proc) {
     // Initialize with conservative defaults
-    proc->freq = 100.0f;
+    proc->freq = 20000.0f;  // High frequency, effectively no filtering
     proc->threshold = 0.0f;      // 0 dB threshold
     proc->ratio = 2.0f;         // 2:1 compression
     proc->attack_ms = 10.0f;
@@ -12,7 +12,8 @@ void init_processor(AudioProcessor *proc) {
     proc->knee_width = 6.0f;
     proc->level = 1.0f;
     proc->mix = 0.0f;           // No mix initially
-    
+    proc->feedback_amount = 0.0f;  // No feedback initially
+
     proc->pre_post_enabled = 0;
     proc->sc_enabled = 0;
     
@@ -35,6 +36,7 @@ void init_processor(AudioProcessor *proc) {
         proc->filtered[i] = 0.0f;
         proc->sc_filtered[i] = 0.0f;
         proc->out[i] = 0.0f;
+        proc->feedback_buffer[i] = 0.0f;
     }
     
     proc->current_gr = 0.0f;
@@ -130,8 +132,24 @@ void process_block(AudioProcessor *proc) {
         float compressed_b = proc->in_b[i] * gain * proc->level;
         // Mix: (compressed_b * (1-mix)) + (in_a * mix)
         mixed[i] = compressed_b * (1.0f - proc->mix) + proc->in_a[i] * proc->mix;
+
+        // Add feedback if enabled
+        if (proc->pre_post_enabled) {
+            mixed[i] += proc->feedback_buffer[i] * proc->feedback_amount;
+        }
     }
 
     // Apply hate (saturation) to mixed signal
-    process_hate(&proc->hate, mixed, proc->out, BLOCK_SIZE);
+    float hate_out[BLOCK_SIZE];
+    process_hate(&proc->hate, mixed, hate_out, BLOCK_SIZE);
+
+    // Apply final filter to saturated signal
+    for(int i = 0; i < BLOCK_SIZE; i++) {
+        proc->out[i] = process_biquad(&proc->freq_filter, hate_out[i]);
+    }
+
+    // Update feedback buffer
+    for(int i = 0; i < BLOCK_SIZE; i++) {
+        proc->feedback_buffer[i] = proc->out[i];
+    }
 }
