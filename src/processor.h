@@ -28,6 +28,7 @@ typedef struct {
     float release_ms;    // Release time (ms)
     float knee_width;    // Soft knee width (dB)
     float level;         // Output level
+    float mix;           // Mix amount (0.0-1.0)
     
     // Routing
     int pre_post_enabled;

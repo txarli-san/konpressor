@@ -6,10 +6,11 @@ void init_processor(AudioProcessor *proc) {
     proc->freq = 100.0f;
     proc->threshold = 0.0f;      // 0 dB threshold
     proc->ratio = 2.0f;         // 2:1 compression
-    proc->attack_ms = 10.0f;    
-    proc->release_ms = 100.0f;  
-    proc->knee_width = 6.0f;    
+    proc->attack_ms = 10.0f;
+    proc->release_ms = 100.0f;
+    proc->knee_width = 6.0f;
     proc->level = 1.0f;
+    proc->mix = 0.0f;           // No mix initially
     
     proc->pre_post_enabled = 0;
     proc->sc_enabled = 0;
@@ -93,35 +94,37 @@ void set_sidechain(AudioProcessor *proc, int enabled) {
 void process_block(AudioProcessor *proc) {
     if(proc->bypass.bypass_enabled) {
         for(int i = 0; i < BLOCK_SIZE; i++) {
-            proc->out[i] = proc->in_a[i];
+            proc->out[i] = proc->in_b[i];  // Bypass outputs main signal (in_b)
         }
         return;
     }
-    
-    // Filter main signal
+
+    // Filter control signal (in_a) for detection
     for(int i = 0; i < BLOCK_SIZE; i++) {
         proc->filtered[i] = process_biquad(&proc->freq_filter, proc->in_a[i]);
     }
-    
-    // Process sidechain or main signal for detection
+
+    // Process sidechain or control signal for detection
     const float *detect_signal;
     if(proc->sc_enabled) {
         for(int i = 0; i < BLOCK_SIZE; i++) {
-            proc->sc_filtered[i] = process_biquad(&proc->sc_filter, proc->in_b[i]);
+            proc->sc_filtered[i] = process_biquad(&proc->sc_filter, proc->in_a[i]);  // Filter control signal
         }
         detect_signal = proc->sc_filtered;
     } else {
         detect_signal = proc->filtered;
     }
-    
-    // Get gain reduction and apply it, preserving signal polarity
+
+    // Get gain reduction and apply it to main signal (in_b)
     float gain = process_level_detector(&proc->detector, detect_signal, BLOCK_SIZE);
-    
+
     proc->current_gr = proc->detector.current_gr;
     proc->max_gr = proc->detector.max_gr;
-    
+
     for(int i = 0; i < BLOCK_SIZE; i++) {
-        // Preserve signal polarity by applying gain directly
-        proc->out[i] = proc->filtered[i] * gain;
+        // Apply compression gain and makeup gain to main signal (in_b)
+        float compressed_b = proc->in_b[i] * gain * proc->level;
+        // Mix: (compressed_b * (1-mix)) + (in_a * mix)
+        proc->out[i] = compressed_b * (1.0f - proc->mix) + proc->in_a[i] * proc->mix;
     }
 }

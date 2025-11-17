@@ -3,14 +3,6 @@
 #include <stdio.h>
 #include <math.h>
 
-static float compute_rms_level(const float *buffer, int size) {
-    float sum_squared = 0.0f;
-    for(int i = 0; i < size; i++) {
-        sum_squared += buffer[i] * buffer[i];
-    }
-    return 20.0f * log10f(sqrtf(sum_squared / size));
-}
-
 int main() {
     float buffer[BLOCK_SIZE];
     
